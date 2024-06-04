@@ -7,11 +7,9 @@ const bodyParser = require("body-parser");
 
 const app = express();
 
-// Middleware
 app.use(cors());
 app.use(bodyParser.json());
 
-// Connect to MongoDB
 mongoose
   .connect(
     "mongodb+srv://llv7417:whrbtjr123@cluster0.wewyamo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
@@ -27,7 +25,6 @@ mongoose
     console.error("Error connecting to MongoDB:", error);
   });
 
-// User schema and model
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
@@ -38,8 +35,7 @@ const User = mongoose.model("User", UserSchema);
 
 app.post("/Register", async (req, res) => {
   const { username, password, email } = req.body;
-  console.log("Received registration request: ", req.body);
-  console.log("Email received: ", email); // 디버깅용 로그
+
   const hashedPassword = await bcrypt.hash(password, 10);
 
   try {
@@ -52,7 +48,6 @@ app.post("/Register", async (req, res) => {
   }
 });
 
-// Login route
 app.post("/Login", async (req, res) => {
   const { username, password } = req.body;
   const user = await User.findOne({ username });
