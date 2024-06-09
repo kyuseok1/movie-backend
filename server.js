@@ -12,7 +12,7 @@ require("dotenv").config();
 const app = express();
 
 const corsOptions = {
-  origin: process.env.CLIENT_ORIGIN || "http://localhost:3000",
+  origin: process.env.CLIENT_ORIGIN,
   credentials: true,
 };
 app.use(cors(corsOptions));
@@ -117,7 +117,7 @@ app.get(
   "/auth/google/callback",
   passport.authenticate("google", { failureRedirect: "/" }),
   (req, res) => {
-    res.redirect("/login");
+    res.redirect(`${process.env.CLIENT_ORIGIN}/login`);
   }
 );
 
@@ -131,10 +131,7 @@ app.get("/auth/logout", (req, res, next) => {
     if (err) {
       return next(err);
     }
-    req.session.destroy(() => {
-      res.clearCookie("connect.sid");
-      res.redirect("/");
-    });
+    res.redirect(process.env.CLIENT_ORIGIN);
   });
 });
 
