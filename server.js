@@ -1,23 +1,28 @@
 const express = require("express");
 const mongoose = require("mongoose");
+const passport = require("passport");
+const GoogleStrategy = require("passport-google-oauth20").Strategy;
+const LocalStrategy = require("passport-local").Strategy;
 const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
+const session = require("express-session");
 const cors = require("cors");
 const bodyParser = require("body-parser");
+require("dotenv").config();
 
 const app = express();
 
-app.use(cors());
+const corsOptions = {
+  origin: process.env.CLIENT_ORIGIN || "http://localhost:3000",
+  credentials: true,
+};
+app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
 mongoose
-  .connect(
-    "mongodb+srv://llv7417:whrbtjr123@cluster0.wewyamo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
-    {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    }
-  )
+  .connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
   .then(() => {
     console.log("Connected to MongoDB");
   })
@@ -27,15 +32,114 @@ mongoose
 
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
+  password: { type: String },
   email: { type: String, required: true, unique: true },
+  googleId: { type: String, unique: true },
 });
 
 const User = mongoose.model("User", UserSchema);
 
-app.post("/Register", async (req, res) => {
-  const { username, password, email } = req.body;
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: "/auth/google/callback",
+    },
+    async (accessToken, refreshToken, profile, done) => {
+      const { id, displayName, emails } = profile;
+      const email = emails[0].value;
+      try {
+        let user = await User.findOne({ googleId: id });
+        if (!user) {
+          user = new User({ googleId: id, email, username: displayName });
+          await user.save();
+        }
+        done(null, user);
+      } catch (error) {
+        done(error, null);
+      }
+    }
+  )
+);
 
+passport.use(
+  new LocalStrategy(async (username, password, done) => {
+    try {
+      const user = await User.findOne({ username });
+      if (!user) {
+        return done(null, false, { message: "Incorrect username." });
+      }
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return done(null, false, { message: "Incorrect password." });
+      }
+      return done(null, user);
+    } catch (error) {
+      return done(error);
+    }
+  })
+);
+
+passport.serializeUser((user, done) => {
+  done(null, user.id);
+});
+
+passport.deserializeUser(async (id, done) => {
+  try {
+    const user = await User.findById(id);
+    done(null, user);
+  } catch (error) {
+    done(error, null);
+  }
+});
+
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false },
+  })
+);
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+app.get(
+  "/auth/google",
+  passport.authenticate("google", {
+    scope: ["https://www.googleapis.com/auth/plus.login", "email"],
+  })
+);
+
+app.get(
+  "/auth/google/callback",
+  passport.authenticate("google", { failureRedirect: "/" }),
+  (req, res) => {
+    res.redirect("/login");
+  }
+);
+
+app.get("/api/user", (req, res) => {
+  console.log("Fetching user data...");
+  res.send(req.user);
+});
+
+app.get("/auth/logout", (req, res, next) => {
+  req.logout((err) => {
+    if (err) {
+      return next(err);
+    }
+    req.session.destroy(() => {
+      res.clearCookie("connect.sid");
+      res.redirect("/");
+    });
+  });
+});
+
+app.post("/register", async (req, res) => {
+  const { username, password, email } = req.body;
   const hashedPassword = await bcrypt.hash(password, 10);
 
   try {
@@ -48,21 +152,11 @@ app.post("/Register", async (req, res) => {
   }
 });
 
-app.post("/Login", async (req, res) => {
-  const { username, password } = req.body;
-  const user = await User.findOne({ username });
-
-  if (user && (await bcrypt.compare(password, user.password))) {
-    const token = jwt.sign({ id: user._id }, "your_jwt_secret", {
-      expiresIn: "1h",
-    });
-    res.json({ token });
-  } else {
-    res.status(401).send("Invalid credentials");
-  }
+app.post("/login", passport.authenticate("local"), (req, res) => {
+  res.send("Logged in successfully");
 });
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
