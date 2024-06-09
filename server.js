@@ -12,7 +12,7 @@ require("dotenv").config();
 const app = express();
 
 const corsOptions = {
-  origin: "https://movie-mate0.vercel.app",
+  origin: process.env.CLIENT_ORIGIN,
   credentials: true,
 };
 app.use(cors(corsOptions));
@@ -117,7 +117,7 @@ app.get(
   "/auth/google/callback",
   passport.authenticate("google", { failureRedirect: "/" }),
   (req, res) => {
-    res.redirect(`https://movie-mate0.vercel.app/login`);
+    res.redirect(`${process.env.CLIENT_ORIGIN}/login`);
   }
 );
 
@@ -131,7 +131,7 @@ app.get("/auth/logout", (req, res, next) => {
     if (err) {
       return next(err);
     }
-    res.redirect("https://movie-mate0.vercel.app");
+    res.redirect(process.env.CLIENT_ORIGIN);
   });
 });
 
